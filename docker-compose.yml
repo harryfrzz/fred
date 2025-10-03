@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  python-backend:
+    build: ./python-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./python-backend:/app
+      - ml-models:/app/models
+
+  mock-api:
+    build: ./go-mock-api
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build: ./go-frontend
+    environment:
+      - PYTHON_API_URL=http://python-backend:8000
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - python-backend
+      - mock-api
+    stdin_open: true
+    tty: true
+
+volumes:
+  redis-data:
+  ml-models:
