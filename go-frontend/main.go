@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/go-redis/redis/v8"
@@ -84,6 +85,9 @@ type model struct {
 	height int
 	ready  bool
 
+	// Viewport for scrolling
+	viewport viewport.Model
+
 	// Data
 	transactions      []Transaction
 	fraudResults      []FraudResult
@@ -120,8 +124,13 @@ func initialModel() model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	vp := viewport.New(100, 30)
+	vp.YPosition = 0
+	vp.HighPerformanceRendering = false
+
 	return model{
 		spinner:           s,
+		viewport:          vp,
 		transactions:      []Transaction{},
 		fraudResults:      []FraudResult{},
 		recentRiskScores:  []float64{},
@@ -177,10 +186,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Pass other keys to viewport for scrolling
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.ready = true
+		
+		// Update viewport size
+		if !m.ready {
+			m.viewport = viewport.New(msg.Width, msg.Height-2)
+			m.viewport.YPosition = 0
+			m.ready = true
+		} else {
+			m.viewport.Width = msg.Width
+			m.viewport.Height = msg.Height - 2
+		}
 
 	case tickMsg:
 		// Refresh stats every second
@@ -357,11 +380,15 @@ func (m model) View() string {
 		errorMsg = "\n" + errorStyle.Render("⚠ "+m.errorMessage)
 	}
 
-	// Help
-	help := statusStyle.Render("Press '/' to search | 'c' to clear search | 'r' to refresh | 'q' to quit")
+	// Help with scroll position
+	scrollInfo := ""
+	if m.viewport.TotalLineCount() > 0 {
+		scrollInfo = fmt.Sprintf(" | View: %.0f%%", m.viewport.ScrollPercent()*100)
+	}
+	help := statusStyle.Render("↑↓ j/k scroll | PgUp/PgDn | Home/End | / search | r refresh | q quit" + scrollInfo)
 
-	// Combine all sections
-	content := lipgloss.JoinVertical(
+	// Combine all sections into full content
+	fullContent := lipgloss.JoinVertical(
 		lipgloss.Left,
 		asciiArt,
 		status,
@@ -376,11 +403,17 @@ func (m model) View() string {
 		transactionTable,
 		aiRow,
 		errorMsg,
-		"",
-		help,
 	)
 
-	return content
+	// Set the content in the viewport
+	m.viewport.SetContent(fullContent)
+
+	// Return viewport with help at bottom
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.viewport.View(),
+		help,
+	)
 }
 
 func (m model) renderRecentTransactions() string {
@@ -689,10 +722,10 @@ func (m model) renderTransactionTable() string {
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245"))
 	lines = append(lines, headerStyle.Render(
-		fmt.Sprintf("%-20s %-10s %-12s %-10s %-15s %-12s",
-			"Transaction ID", "Time", "Amount", "Risk %", "Fraud Status", "Risk Level"),
+		fmt.Sprintf("%-18s %-10s %-10s %-8s %-18s",
+			"Transaction ID", "Time", "Amount", "Risk", "Status"),
 	))
-	lines = append(lines, strings.Repeat("─", 95))
+	lines = append(lines, strings.Repeat("─", 70))
 
 	// Create combined list with all data
 	type TableRow struct {
@@ -752,7 +785,7 @@ func (m model) renderTransactionTable() string {
 		amountStr := fmt.Sprintf("$%.0f", row.Amount)
 		riskStr := fmt.Sprintf("%.1f%%", row.FraudProbability*100)
 
-		// Fraud Status Column
+		// Fraud Status - compact version
 		var fraudStatusStyle lipgloss.Style
 		fraudStatus := ""
 		if row.IsFraud {
@@ -766,34 +799,15 @@ func (m model) renderTransactionTable() string {
 			fraudStatus = "⚡ CAUTION"
 		} else {
 			fraudStatusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-			fraudStatus = "✓  LEGITIMATE"
+			fraudStatus = "✓ OK"
 		}
 
-		// Risk Level Column
-		var riskLevelStyle lipgloss.Style
-		riskLevelStr := ""
-		switch row.RiskLevel {
-		case "critical":
-			riskLevelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-			riskLevelStr = "CRITICAL"
-		case "high":
-			riskLevelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-			riskLevelStr = "HIGH"
-		case "medium":
-			riskLevelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
-			riskLevelStr = "MEDIUM"
-		default:
-			riskLevelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
-			riskLevelStr = "LOW"
-		}
-
-		line := fmt.Sprintf("%-20s %-10s %-12s %-10s %-15s %s",
+		line := fmt.Sprintf("%-18s %-10s %-10s %-8s %s",
 			txnID,
 			timeStr,
 			amountStr,
 			riskStr,
 			fraudStatusStyle.Render(fraudStatus),
-			riskLevelStyle.Render(riskLevelStr),
 		)
 
 		lines = append(lines, line)
