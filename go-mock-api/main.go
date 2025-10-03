@@ -1,10 +1,8 @@
-package gomockapi
 package main
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -299,6 +297,38 @@ func main() {
 		}
 		
 		c.JSON(http.StatusOK, txn)
+	})
+	
+	// Submit custom transaction for fraud detection
+	router.POST("/transaction/custom", func(c *gin.Context) {
+		var txn Transaction
+		
+		if err := c.BindJSON(&txn); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		
+		// Set timestamp if not provided
+		if txn.Timestamp.IsZero() {
+			txn.Timestamp = time.Now()
+		}
+		
+		// Generate transaction ID if not provided
+		if txn.TransactionID == "" {
+			txn.TransactionID = uuid.New().String()
+		}
+		
+		// Publish to Redis for fraud detection
+		if err := publishTransaction(txn); err != nil {
+			log.Printf("Failed to publish transaction: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to publish transaction"})
+			return
+		}
+		
+		c.JSON(http.StatusOK, gin.H{
+			"status": "submitted",
+			"transaction": txn,
+		})
 	})
 	
 	// Generate batch of transactions

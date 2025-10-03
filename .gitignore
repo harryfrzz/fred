@@ -39,6 +39,8 @@ vendor/
 models/
 !models/.gitkeep
 
+dump.rdb
+
 # IDE
 .vscode/
 .idea/

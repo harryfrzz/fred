@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import json
 import time
+import asyncio
 from datetime import datetime
 from typing import Optional
 
 from config import get_settings
 from models import Transaction, FraudScore, FraudExplanation, HealthCheck, Stats
 from feature_extractor import FeatureExtractor
-from fraud_detector import FraudDetector
+from pretrained_detector import PretrainedFraudDetector  # Using pretrained LR model
 from ai_reasoner import AIReasoner
 
 
@@ -28,6 +29,76 @@ stats = {
 }
 
 
+async def process_transactions_from_redis():
+    """Background task to process transactions from Redis pub/sub"""
+    pubsub = redis_client.pubsub()
+    await pubsub.subscribe("transactions")
+    print("🎧 Listening for transactions on Redis channel 'transactions'...")
+    
+    try:
+        async for message in pubsub.listen():
+            if message["type"] == "message":
+                try:
+                    # Parse transaction
+                    txn_data = json.loads(message["data"])
+                    transaction = Transaction(**txn_data)
+                    
+                    # Extract features
+                    features_dict = feature_extractor.extract_features(transaction)
+                    features_array = feature_extractor.features_to_array(features_dict)
+                    
+                    # Predict fraud
+                    fraud_prob, importance = fraud_detector.predict(features_array)
+                    risk_level = fraud_detector.get_risk_level(fraud_prob)
+                    is_fraud = fraud_prob >= settings.fraud_threshold
+                    
+                    # Create fraud score with ALL transaction details
+                    fraud_score = FraudScore(
+                        transaction_id=transaction.transaction_id,
+                        fraud_probability=fraud_prob,
+                        risk_level=risk_level,
+                        is_fraud=is_fraud,
+                        features=features_dict,
+                        model_used=settings.model_type
+                    )
+                    
+                    # Update stats
+                    stats["total_transactions"] += 1
+                    stats["total_risk_score"] += float(fraud_prob)
+                    if is_fraud:
+                        stats["fraud_detected"] += 1
+                    
+                    # Publish COMPLETE fraud result to Redis (includes all transaction data)
+                    # Convert all values to native Python types for JSON serialization
+                    fraud_result_with_txn = {
+                        "transaction_id": transaction.transaction_id,
+                        "user_id": transaction.user_id,
+                        "amount": float(transaction.amount),
+                        "transaction_type": transaction.transaction_type,
+                        "merchant_id": transaction.merchant_id,
+                        "timestamp": transaction.timestamp.isoformat(),
+                        "fraud_probability": float(fraud_prob),
+                        "risk_level": str(risk_level),
+                        "is_fraud": bool(is_fraud),
+                        "features": {k: float(v) for k, v in features_dict.items()},
+                        "model_used": str(settings.model_type)
+                    }
+                    
+                    await redis_client.publish(
+                        settings.redis_results_stream,
+                        json.dumps(fraud_result_with_txn)
+                    )
+                    
+                    print(f"✅ Processed txn {transaction.transaction_id[:8]}... - Risk: {fraud_prob:.2f} ({risk_level})")
+                    
+                except Exception as e:
+                    print(f"❌ Error processing transaction: {e}")
+    except asyncio.CancelledError:
+        print("🛑 Stopping transaction processing...")
+        await pubsub.unsubscribe("transactions")
+        await pubsub.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -36,10 +107,7 @@ async def lifespan(app: FastAPI):
     # Startup
     print("🚀 Starting Fraud Detection API...")
     feature_extractor = FeatureExtractor(window_size=settings.feature_window)
-    fraud_detector = FraudDetector(
-        model_type=settings.model_type,
-        model_path=settings.model_path
-    )
+    fraud_detector = PretrainedFraudDetector()  # Using pretrained LR model
     ai_reasoner = AIReasoner()
     
     # Connect to Redis
@@ -47,13 +115,18 @@ async def lifespan(app: FastAPI):
     await redis_client.ping()
     print("✅ Connected to Redis")
     
-    # Start background task to process Redis stream
-    # (In production, this would be a separate worker)
+    # Start background task to process transactions from Redis
+    processing_task = asyncio.create_task(process_transactions_from_redis())
     
     yield
     
     # Shutdown
     print("🛑 Shutting down...")
+    processing_task.cancel()
+    try:
+        await processing_task
+    except asyncio.CancelledError:
+        pass
     if redis_client:
         await redis_client.close()
 
@@ -114,7 +187,7 @@ async def get_stats():
         fraud_detected=stats["fraud_detected"],
         fraud_rate=fraud_rate,
         avg_risk_score=avg_risk_score,
-        model_type=settings.model_type,
+        model_type="pretrained_lr",  # Updated model type
         uptime_seconds=time.time() - stats["start_time"]
     )
 

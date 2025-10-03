@@ -1,9 +1,7 @@
-package gofrontend
 package main
 
 import (
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -49,7 +47,22 @@ func BarChart(title string, data map[string]float64, width int, color string) st
 	
 	maxBarWidth := width - 40
 	
-	for label, value := range data {
+	// Sort labels (hours) chronologically
+	var labels []string
+	for label := range data {
+		labels = append(labels, label)
+	}
+	// Simple sort - will work for HH:MM format
+	for i := 0; i < len(labels); i++ {
+		for j := i + 1; j < len(labels); j++ {
+			if labels[i] > labels[j] {
+				labels[i], labels[j] = labels[j], labels[i]
+			}
+		}
+	}
+	
+	for _, label := range labels {
+		value := data[label]
 		barWidth := int((value / maxVal) * float64(maxBarWidth))
 		if barWidth < 1 && value > 0 {
 			barWidth = 1
@@ -286,8 +299,7 @@ func StatsBox(title string, value string, trend string, color string) string {
 	
 	valueStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(color)).
-		FontSize(24)
+		Foreground(lipgloss.Color(color))
 	
 	trendStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("245")).

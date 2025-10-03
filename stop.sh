@@ -18,6 +18,12 @@ pkill -f "go-frontend" || true
 
 # Stop Redis
 echo "Stopping Redis..."
-redis-cli shutdown 2>/dev/null || true
+if ! pidof systemd > /dev/null 2>&1; then
+    # Dev container or Docker - use service command
+    sudo service redis-server stop > /dev/null 2>&1 || redis-cli shutdown 2>/dev/null || true
+else
+    # Native Linux with systemd or other platforms
+    redis-cli shutdown 2>/dev/null || true
+fi
 
 echo "✅ All services stopped"

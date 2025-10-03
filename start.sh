@@ -42,13 +42,23 @@ if [ ! -f .env ]; then
     echo "⚠️  Please edit .env and add your HuggingFace API key"
 fi
 
+# Create logs directory
+mkdir -p logs
+
 echo ""
 echo "🔧 Setting up services..."
 echo ""
 
 # Start Redis in background
 echo "1️⃣  Starting Redis..."
-redis-server --daemonize yes
+# Check if running in a container (no systemd)
+if ! pidof systemd > /dev/null 2>&1; then
+    # Dev container or Docker - use service command
+    sudo service redis-server start > /dev/null 2>&1 || redis-server --daemonize yes
+else
+    # Native Linux with systemd
+    redis-server --daemonize yes
+fi
 sleep 2
 echo "✅ Redis started"
 
@@ -105,24 +115,30 @@ echo ""
 echo "⏳ Waiting for services to be ready..."
 sleep 5
 
-# Start transaction generation
+# Transaction generation disabled - run manually with:
+# ./critical_fraud.sh or ./quick_fraud.sh or ./simulate_fraud.sh
 echo ""
-echo "4️⃣  Starting transaction generation..."
-curl -X POST http://localhost:8080/start-generation > /dev/null 2>&1
-echo "✅ Transaction generation started"
+echo "💡 Transaction generation is DISABLED by default"
+echo "   To generate transactions, run:"
+echo "   • ./critical_fraud.sh    (fraud matching model training)"
+echo "   • ./quick_fraud.sh       (quick test transactions)"
+echo "   • ./simulate_fraud.sh    (large volume simulation)"
+echo ""
 
 # Setup and run Go frontend
 echo ""
 echo "5️⃣  Starting Beautiful TUI Dashboard..."
 cd go-frontend
 
-# Download Go dependencies
-echo "   Downloading Go dependencies..."
-go mod download
-
-# Build
-echo "   Building frontend..."
-go build -o frontend
+# Download Go dependencies if needed
+if [ ! -f "go-frontend" ]; then
+    echo "   Downloading Go dependencies..."
+    go mod download
+    
+    # Build
+    echo "   Building frontend..."
+    go build -o go-frontend .
+fi
 
 echo ""
 echo "=============================================="
@@ -141,7 +157,7 @@ echo "=============================================="
 echo ""
 
 # Run the frontend (this will block)
-./frontend
+./go-frontend
 
 # Cleanup function
 cleanup() {

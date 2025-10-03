@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     
     # ML Model Configuration
     model_type: str = "xgboost"  # xgboost, lightgbm, or pytorch
-    fraud_threshold: float = 0.7
+    fraud_threshold: float = 0.35  # Lowered to 35% for better detection
     model_path: str = "./models"
     
     # HuggingFace Configuration
@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     class Config:
         env_file = "../.env"
         case_sensitive = False
+        extra = "ignore"  # Ignore extra fields in .env file
+        protected_namespaces = ()  # Allow model_ prefix fields
 
 
 @lru_cache()
