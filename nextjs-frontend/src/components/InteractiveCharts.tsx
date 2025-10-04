@@ -44,17 +44,21 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
   // Check if we have data
   if (!transactions || transactions.length === 0) {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-          📊 Interactive Charts
+      <div className="bg-gray-950 border border-gray-900 rounded-lg p-8">
+        <h2 className="text-xl font-semibold text-white mb-6">
+          Analytics & Insights
         </h2>
         <div className="h-64 flex items-center justify-center">
           <div className="text-center">
-            <div className="text-6xl mb-4">📊</div>
-            <p className="text-gray-500 dark:text-gray-400 text-lg">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <p className="text-gray-400 text-sm">
               No transaction data available yet
             </p>
-            <p className="text-gray-400 dark:text-gray-500 text-sm mt-2">
+            <p className="text-gray-600 text-xs mt-2">
               Charts will appear once transactions are processed
             </p>
           </div>
@@ -343,41 +347,38 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
   };
 
   const tabs = [
-    { id: 'risk-trend', label: 'Risk Trend', icon: '📈' },
-    { id: 'fraud-distribution', label: 'Distribution', icon: '🎯' },
-    { id: 'amount-analysis', label: 'Amount Analysis', icon: '💰' },
-    { id: 'hourly-volume', label: 'Hourly Volume', icon: '⏰' },
+    { id: 'risk-trend', label: 'Risk Trend' },
+    { id: 'fraud-distribution', label: 'Distribution' },
+    { id: 'amount-analysis', label: 'Amount Analysis' },
+    { id: 'hourly-volume', label: 'Hourly Volume' },
   ];
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+    <div className="bg-gray-950 border border-gray-900 rounded-lg p-6">
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-          📊 Interactive Analytics
+        <h2 className="text-xl font-semibold text-white">
+          Analytics & Insights
         </h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+        <p className="text-xs text-gray-500 mt-1">
           Visualizing {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
         </p>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
-        <nav className="-mb-px flex space-x-8 overflow-x-auto">
+      <div className="border-b border-gray-800 mb-6">
+        <nav className="-mb-px flex space-x-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as TabType)}
-              className={`
-                py-4 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap
-                ${
+              className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors whitespace-nowrap ${
                   activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+                    ? 'border-blue-500 text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-700'
                 }
               `}
             >
-              <span className="mr-2">{tab.icon}</span>
               {tab.label}
             </button>
           ))}
@@ -388,7 +389,7 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
       <div className="h-96">
         {activeTab === 'risk-trend' && (
           <div className="h-full">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-sm font-medium text-gray-400 mb-4">
               Risk Score Trend (Last 20 Transactions)
             </h3>
             <div className="h-[calc(100%-2rem)]">
@@ -399,7 +400,7 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
 
         {activeTab === 'fraud-distribution' && (
           <div className="h-full">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-sm font-medium text-gray-400 mb-4">
               Risk Level Distribution
             </h3>
             <div className="h-[calc(100%-2rem)] flex items-center justify-center">
@@ -412,7 +413,7 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
 
         {activeTab === 'amount-analysis' && (
           <div className="h-full">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-sm font-medium text-gray-400 mb-4">
               Transaction Amount Distribution
             </h3>
             <div className="h-[calc(100%-2rem)]">
@@ -423,7 +424,7 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
 
         {activeTab === 'hourly-volume' && (
           <div className="h-full">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            <h3 className="text-sm font-medium text-gray-400 mb-4">
               Hourly Transaction Volume
             </h3>
             <div className="h-[calc(100%-2rem)]">
@@ -434,22 +435,22 @@ export const InteractiveCharts: React.FC<ChartsProps> = ({ transactions }) => {
       </div>
 
       {/* Summary Stats */}
-      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+      <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-gray-800">
         <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{transactions.length}</p>
+          <p className="text-xs text-gray-500 mb-1">Total</p>
+          <p className="text-2xl font-bold text-white">{transactions.length}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Fraud</p>
-          <p className="text-2xl font-bold text-red-600 dark:text-red-400">{riskLevels.fraud}</p>
+          <p className="text-xs text-gray-500 mb-1">Fraud</p>
+          <p className="text-2xl font-bold text-red-400">{riskLevels.fraud}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">High Risk</p>
-          <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">{riskLevels.high}</p>
+          <p className="text-xs text-gray-500 mb-1">High Risk</p>
+          <p className="text-2xl font-bold text-orange-400">{riskLevels.high}</p>
         </div>
         <div className="text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Low Risk</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">{riskLevels.low}</p>
+          <p className="text-xs text-gray-500 mb-1">Low Risk</p>
+          <p className="text-2xl font-bold text-green-400">{riskLevels.low}</p>
         </div>
       </div>
     </div>

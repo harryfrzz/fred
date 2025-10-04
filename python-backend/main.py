@@ -88,8 +88,8 @@ async def process_transactions_from_redis():
                         "model_used": str(settings.model_type)
                     }
                     
-                    # Generate AI explanation if enabled and fraud risk is high
-                    if settings.enable_ai_reasoning and (is_fraud or fraud_prob >= 0.5):
+                    # Generate AI explanation ONLY for confirmed fraud transactions
+                    if settings.enable_ai_reasoning and is_fraud:
                         try:
                             explanation = await ai_reasoner.explain_fraud(
                                 transaction_id=transaction.transaction_id,
