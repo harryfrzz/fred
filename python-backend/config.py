@@ -20,7 +20,15 @@ class Settings(BaseSettings):
     fraud_threshold: float = 0.35  # Lowered to 35% for better detection
     model_path: str = "./models"
     
-    # HuggingFace Configuration
+    # AI Reasoning Configuration
+    enable_ai_reasoning: bool = True  # Toggle for AI-powered fraud reasoning
+    ai_reasoning_mode: str = "demo"  # Options: "demo", "ollama", "huggingface"
+    
+    # Ollama Configuration (for local AI)
+    ollama_url: str = "http://localhost:11434"
+    ollama_model: str = "gemma2:2b"  # Using Gemma 2B for efficiency
+    
+    # HuggingFace Configuration (deprecated - use Ollama instead)
     huggingface_api_key: str = ""
     huggingface_model: str = "gpt-oss-20b"
     huggingface_api_url: str = "https://api-inference.huggingface.co/models"

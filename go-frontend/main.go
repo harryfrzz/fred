@@ -87,6 +87,7 @@ type model struct {
 
 	// Viewport for scrolling
 	viewport viewport.Model
+	content  string // Store rendered content for viewport
 
 	// Data
 	transactions      []Transaction
@@ -118,6 +119,10 @@ type transactionMsg Transaction
 type fraudResultMsg FraudResult
 type statsMsg Stats
 type errorMsg string
+type recentResultsMsg struct {
+	Results []FraudResult
+	Total   int
+}
 
 func initialModel() model {
 	s := spinner.New()
@@ -146,12 +151,15 @@ func (m model) Init() tea.Cmd {
 	return tea.Batch(
 		m.spinner.Tick,
 		tick(),
+		fetchRecentResults(m.pythonAPI),  // Fetch historical data on startup
 		listenRedis(m.redisClient),
 		fetchStats(m.pythonAPI),
 	)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.searchActive {
@@ -184,29 +192,43 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "c":
 			m.searchInput = ""
 			return m, nil
+		default:
+			// Pass all other keys to viewport for scrolling
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
 		}
-
-		// Pass other keys to viewport for scrolling
-		var cmd tea.Cmd
-		m.viewport, cmd = m.viewport.Update(msg)
-		return m, cmd
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		
-		// Update viewport size
+		// Update viewport size - reserve space for help text at bottom (2 lines)
+		headerHeight := 2
+		footerHeight := 2
+		verticalMarginHeight := headerHeight + footerHeight
+		
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-2)
+			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
 			m.viewport.YPosition = 0
+			m.viewport.HighPerformanceRendering = false
 			m.ready = true
 		} else {
 			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - 2
+			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
+		
+		// Update content after resize
+		m.updateViewportContent()
+		
+	case tea.MouseMsg:
+		// Handle mouse wheel scrolling
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		return m, cmd
 
 	case tickMsg:
-		// Refresh stats every second
+		// Refresh stats every second and update viewport
+		m.updateViewportContent()
 		return m, tea.Batch(tick(), fetchStats(m.pythonAPI))
 
 	case transactionMsg:
@@ -220,17 +242,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		hour := msg.Timestamp.Format("15:00")
 		m.transactionCounts[hour]++
 
+		// Update viewport with new data
+		m.updateViewportContent()
+
 		// Continue listening for more messages
 		return m, listenRedis(m.redisClient)
 
 	case fraudResultMsg:
 		m.fraudResults = append(m.fraudResults, FraudResult(msg))
-		if len(m.fraudResults) > 100 {
+		if len(m.fraudResults) > 500 {
 			m.fraudResults = m.fraudResults[1:]
 		}
 
 		m.recentRiskScores = append(m.recentRiskScores, msg.FraudProbability)
-		if len(m.recentRiskScores) > 50 {
+		if len(m.recentRiskScores) > 200 {
 			m.recentRiskScores = m.recentRiskScores[1:]
 		}
 
@@ -239,16 +264,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fraudCounts[hour]++
 		}
 
+		m.totalReceived = len(m.fraudResults)
 		m.lastUpdate = time.Now()
+
+		// Update viewport with new fraud data
+		m.updateViewportContent()
 
 		// Continue listening for more messages
 		return m, listenRedis(m.redisClient)
 
 	case statsMsg:
 		m.stats = Stats(msg)
+		m.updateViewportContent()
+
+	case recentResultsMsg:
+		// Load historical fraud results on startup
+		for _, result := range msg.Results {
+			m.fraudResults = append(m.fraudResults, result)
+			m.recentRiskScores = append(m.recentRiskScores, result.FraudProbability)
+			
+			if result.IsFraud {
+				hour := result.Timestamp.Format("15:00")
+				m.fraudCounts[hour]++
+			}
+		}
+		// Keep only last 500
+		if len(m.fraudResults) > 500 {
+			m.fraudResults = m.fraudResults[len(m.fraudResults)-500:]
+		}
+		if len(m.recentRiskScores) > 200 {
+			m.recentRiskScores = m.recentRiskScores[len(m.recentRiskScores)-200:]
+		}
+		m.totalReceived = len(m.fraudResults)
+		m.lastUpdate = time.Now()
+		m.updateViewportContent()
+		
+		// Continue listening for real-time updates after loading historical data
+		return m, listenRedis(m.redisClient)
 
 	case errorMsg:
 		m.errorMessage = string(msg)
+		m.updateViewportContent()
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -259,11 +315,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) View() string {
+// updateViewportContent renders the full content and updates the viewport
+func (m *model) updateViewportContent() {
 	if !m.ready {
-		return "\n  Initializing..."
+		return
 	}
+	
+	// Render all content (excluding help text which goes below viewport)
+	content := m.renderFullDashboard()
+	m.content = content
+	m.viewport.SetContent(content)
+}
 
+// renderFullDashboard creates the complete dashboard content
+func (m model) renderFullDashboard() string {
 	// ASCII Art Header
 	asciiArt := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("86")).
@@ -317,8 +382,8 @@ func (m model) View() string {
 		),
 	)
 
-	// Charts
-	chartWidth := m.width / 2
+	// Charts - use slightly less than half width to account for spacing
+	chartWidth := (m.width / 2) - 4
 
 	// Risk score trend
 	riskChart := ""
@@ -343,7 +408,7 @@ func (m model) View() string {
 		)
 	}
 
-	chartsRow1 := lipgloss.JoinHorizontal(lipgloss.Top, riskChart, " ", txnChart)
+	chartsRow1 := lipgloss.JoinHorizontal(lipgloss.Top, riskChart, "  ", txnChart)
 
 	// Fraud distribution
 	fraudChart := ""
@@ -359,36 +424,29 @@ func (m model) View() string {
 	// Recent transactions table
 	recentTxns := m.renderRecentTransactions()
 
+	chartsRow2 := lipgloss.JoinHorizontal(lipgloss.Top, fraudChart, "  ", recentTxns)
+	
 	// AI Insights for critical transactions
 	aiInsights := m.renderAIInsights()
+	
+	// Add AI insights section if there are critical transactions
+	aiRow := ""
+	if aiInsights != "" {
+		aiRow = aiInsights
+	}
 
 	// Transaction search and table
 	searchBox := m.renderSearchBox()
 	transactionTable := m.renderTransactionTable()
 
-	chartsRow2 := lipgloss.JoinHorizontal(lipgloss.Top, fraudChart, " ", recentTxns)
-	
-	// Add AI insights row if there are critical transactions
-	aiRow := ""
-	if aiInsights != "" {
-		aiRow = "\n" + aiInsights + "\n"
-	}
-
 	// Error message
 	errorMsg := ""
 	if m.errorMessage != "" {
-		errorMsg = "\n" + errorStyle.Render("⚠ "+m.errorMessage)
+		errorMsg = errorStyle.Render("⚠ "+m.errorMessage)
 	}
 
-	// Help with scroll position
-	scrollInfo := ""
-	if m.viewport.TotalLineCount() > 0 {
-		scrollInfo = fmt.Sprintf(" | View: %.0f%%", m.viewport.ScrollPercent()*100)
-	}
-	help := statusStyle.Render("↑↓ j/k scroll | PgUp/PgDn | Home/End | / search | r refresh | q quit" + scrollInfo)
-
-	// Combine all sections into full content
-	fullContent := lipgloss.JoinVertical(
+	// Combine all sections with proper spacing
+	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		asciiArt,
 		status,
@@ -398,15 +456,42 @@ func (m model) View() string {
 		chartsRow1,
 		"",
 		chartsRow2,
-		"",
-		searchBox,
-		transactionTable,
-		aiRow,
-		errorMsg,
 	)
+	
+	// Add search and table section
+	if searchBox != "" || transactionTable != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, "", searchBox, transactionTable)
+	}
+	
+	// Add AI insights if available
+	if aiRow != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, "", aiRow)
+	}
+	
+	// Add error message if present
+	if errorMsg != "" {
+		content = lipgloss.JoinVertical(lipgloss.Left, content, "", errorMsg)
+	}
+	
+	return content
+}
 
-	// Set the content in the viewport
-	m.viewport.SetContent(fullContent)
+func (m model) View() string {
+	if !m.ready {
+		return "\n  Initializing..."
+	}
+
+	// Help with scroll position - add debug info
+	scrollInfo := ""
+	if m.viewport.TotalLineCount() > 0 {
+		scrollInfo = fmt.Sprintf(" | Scroll: %.0f%% (%d/%d lines)", 
+			m.viewport.ScrollPercent()*100,
+			m.viewport.YOffset,
+			m.viewport.TotalLineCount())
+	} else {
+		scrollInfo = " | No content to scroll"
+	}
+	help := statusStyle.Render("↑↓ j/k scroll | PgUp/PgDn | Home/End | / search | r refresh | q quit" + scrollInfo)
 
 	// Return viewport with help at bottom
 	return lipgloss.JoinVertical(
@@ -516,7 +601,7 @@ func (m model) renderAIInsights() string {
 	}
 	
 	var lines []string
-	lines = append(lines, chartTitleStyle.Render("🤖 AI Fraud Analysis - Most Critical Transaction"))
+	lines = append(lines, chartTitleStyle.Render("LLM Summary"))
 	lines = append(lines, "")
 	
 	// Transaction details
@@ -586,17 +671,20 @@ func tick() tea.Cmd {
 
 func listenRedis(client *redis.Client) tea.Cmd {
 	return func() tea.Msg {
+		ctx := context.Background()
+		
 		if client == nil {
 			return errorMsg("Redis client not initialized")
 		}
 
 		// Subscribe to channels
 		pubsub := client.Subscribe(ctx, "transactions", "fraud_results")
-		defer pubsub.Close()
+		// Don't defer close - keep subscription alive for reuse
 
 		// Wait for subscription confirmation
 		_, err := pubsub.Receive(ctx)
 		if err != nil {
+			pubsub.Close()
 			return errorMsg("Failed to subscribe to Redis: " + err.Error())
 		}
 
@@ -606,6 +694,7 @@ func listenRedis(client *redis.Client) tea.Cmd {
 		select {
 		case msg := <-ch:
 			if msg == nil {
+				pubsub.Close()
 				return errorMsg("Redis channel closed")
 			}
 			switch msg.Channel {
@@ -621,6 +710,7 @@ func listenRedis(client *redis.Client) tea.Cmd {
 				}
 			}
 		case <-ctx.Done():
+			pubsub.Close()
 			return nil
 		}
 
@@ -651,6 +741,38 @@ func fetchStats(apiURL string) tea.Cmd {
 		}
 
 		return statsMsg(stats)
+	}
+}
+
+func fetchRecentResults(apiURL string) tea.Cmd {
+	return func() tea.Msg {
+		if apiURL == "" {
+			apiURL = "http://localhost:8000"
+		}
+
+		resp, err := http.Get(apiURL + "/recent?limit=500")
+		if err != nil {
+			return errorMsg("Failed to fetch recent results: " + err.Error())
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return errorMsg("Failed to read recent results: " + err.Error())
+		}
+
+		var data struct {
+			Transactions []FraudResult `json:"transactions"`
+			Total        int           `json:"total"`
+		}
+		if err := json.Unmarshal(body, &data); err != nil {
+			return errorMsg("Failed to parse recent results: " + err.Error())
+		}
+
+		return recentResultsMsg{
+			Results: data.Transactions,
+			Total:   data.Total,
+		}
 	}
 }
 
@@ -722,10 +844,10 @@ func (m model) renderTransactionTable() string {
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("245"))
 	lines = append(lines, headerStyle.Render(
-		fmt.Sprintf("%-18s %-10s %-10s %-8s %-18s",
-			"Transaction ID", "Time", "Amount", "Risk", "Status"),
+		fmt.Sprintf("%-12s %-8s %-8s %-6s %-16s",
+			"Txn ID", "Time", "Amount", "Risk", "Status"),
 	))
-	lines = append(lines, strings.Repeat("─", 70))
+	lines = append(lines, strings.Repeat("─", 56))
 
 	// Create combined list with all data
 	type TableRow struct {
@@ -776,14 +898,14 @@ func (m model) renderTransactionTable() string {
 	}
 
 	for _, row := range filteredRows {
-		timeStr := row.Timestamp.Format("15:04:05")
+		timeStr := row.Timestamp.Format("15:04")
 		txnID := row.TransactionID
-		if len(txnID) > 18 {
-			txnID = txnID[:18] + ".."
+		if len(txnID) > 12 {
+			txnID = txnID[:10] + ".."
 		}
 
 		amountStr := fmt.Sprintf("$%.0f", row.Amount)
-		riskStr := fmt.Sprintf("%.1f%%", row.FraudProbability*100)
+		riskStr := fmt.Sprintf("%.0f%%", row.FraudProbability*100)
 
 		// Fraud Status - compact version
 		var fraudStatusStyle lipgloss.Style
@@ -793,7 +915,7 @@ func (m model) renderTransactionTable() string {
 			fraudStatus = "🚨 FRAUD"
 		} else if row.FraudProbability >= 0.6 {
 			fraudStatusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("208"))
-			fraudStatus = "⚠️  SUSPICIOUS"
+			fraudStatus = "⚠️  SUSPECT"
 		} else if row.FraudProbability >= 0.3 {
 			fraudStatusStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("226"))
 			fraudStatus = "⚡ CAUTION"
@@ -802,7 +924,7 @@ func (m model) renderTransactionTable() string {
 			fraudStatus = "✓ OK"
 		}
 
-		line := fmt.Sprintf("%-18s %-10s %-10s %-8s %s",
+		line := fmt.Sprintf("%-12s %-8s %-8s %-6s %s",
 			txnID,
 			timeStr,
 			amountStr,

@@ -28,6 +28,10 @@ stats = {
     "start_time": time.time()
 }
 
+# Store recent fraud results for frontend (max 500)
+recent_fraud_results = []
+MAX_RECENT_RESULTS = 500
+
 
 async def process_transactions_from_redis():
     """Background task to process transactions from Redis pub/sub"""
@@ -83,6 +87,11 @@ async def process_transactions_from_redis():
                         "features": {k: float(v) for k, v in features_dict.items()},
                         "model_used": str(settings.model_type)
                     }
+                    
+                    # Store in memory for /recent endpoint
+                    recent_fraud_results.append(fraud_result_with_txn)
+                    if len(recent_fraud_results) > MAX_RECENT_RESULTS:
+                        recent_fraud_results.pop(0)  # Remove oldest
                     
                     await redis_client.publish(
                         settings.redis_results_stream,
@@ -175,21 +184,39 @@ async def health_check():
 
 @app.get("/stats", response_model=Stats)
 async def get_stats():
-    """Get system statistics"""
-    fraud_rate = (stats["fraud_detected"] / stats["total_transactions"] * 100) \
-        if stats["total_transactions"] > 0 else 0.0
+    """Get system statistics - calculated from in-memory recent_fraud_results"""
+    # Calculate stats from recent_fraud_results for accuracy across restarts
+    total_transactions = len(recent_fraud_results)
     
-    avg_risk_score = (stats["total_risk_score"] / stats["total_transactions"]) \
-        if stats["total_transactions"] > 0 else 0.0
+    if total_transactions > 0:
+        fraud_detected = sum(1 for r in recent_fraud_results if r.get("is_fraud", False))
+        total_risk_score = sum(r.get("fraud_probability", 0.0) for r in recent_fraud_results)
+        fraud_rate = (fraud_detected / total_transactions) * 100
+        avg_risk_score = total_risk_score / total_transactions
+    else:
+        fraud_detected = 0
+        fraud_rate = 0.0
+        avg_risk_score = 0.0
     
     return Stats(
-        total_transactions=stats["total_transactions"],
-        fraud_detected=stats["fraud_detected"],
+        total_transactions=total_transactions,
+        fraud_detected=fraud_detected,
         fraud_rate=fraud_rate,
         avg_risk_score=avg_risk_score,
         model_type="pretrained_lr",  # Updated model type
         uptime_seconds=time.time() - stats["start_time"]
     )
+
+
+@app.get("/recent")
+async def get_recent_transactions(limit: int = 100):
+    """Get recent fraud detection results for frontend initialization"""
+    # Return most recent transactions (newest first)
+    return {
+        "transactions": recent_fraud_results[-limit:] if len(recent_fraud_results) > limit else recent_fraud_results,
+        "total": len(recent_fraud_results),
+        "limit": limit
+    }
 
 
 @app.post("/predict", response_model=FraudScore)
