@@ -88,6 +88,23 @@ async def process_transactions_from_redis():
                         "model_used": str(settings.model_type)
                     }
                     
+                    # Generate AI explanation if enabled and fraud risk is high
+                    if settings.enable_ai_reasoning and (is_fraud or fraud_prob >= 0.5):
+                        try:
+                            explanation = await ai_reasoner.explain_fraud(
+                                transaction_id=transaction.transaction_id,
+                                fraud_score=float(fraud_prob),
+                                risk_level=str(risk_level),
+                                features=features_dict,
+                                feature_importance=importance
+                            )
+                            if explanation:
+                                fraud_result_with_txn["ai_explanation"] = explanation.get("explanation", "")
+                                fraud_result_with_txn["risk_factors"] = explanation.get("risk_factors", [])
+                                fraud_result_with_txn["recommendations"] = explanation.get("recommendations", [])
+                        except Exception as e:
+                            print(f"⚠️  AI explanation error: {e}")
+                    
                     # Store in memory for /recent endpoint
                     recent_fraud_results.append(fraud_result_with_txn)
                     if len(recent_fraud_results) > MAX_RECENT_RESULTS:

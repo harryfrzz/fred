@@ -63,41 +63,22 @@ cd /workspaces/anthropic-hackathon-proj
 ./critical_fraud.sh
 echo -e "${GREEN}✅ Test transactions sent${NC}"
 
-# 5. Wait a moment for processing
-echo -e "\n${YELLOW}⏳ Waiting for transactions to be processed...${NC}"
-sleep 3
-
-# 6. Check stats
+# 5. Check stats
 echo -e "\n${YELLOW}📊 Current Statistics:${NC}"
+sleep 2
 curl -s http://localhost:8000/stats | jq '{total: .total_transactions, fraud: .fraud_detected, avg_risk: .avg_risk_score}'
 
-# 7. Start Frontend
-echo -e "\n${YELLOW}5️⃣  Starting Frontend Dashboard...${NC}"
-cd /workspaces/anthropic-hackathon-proj/go-frontend
-pkill -9 go-frontend 2>/dev/null
-if [ ! -f "./go-frontend" ]; then
-    echo "   Building frontend..."
-    go build -o go-frontend main.go charts.go
-fi
-
 echo -e "\n${BLUE}========================================"
-echo -e "✨ All services running!"
+echo -e "✨ Backend services running!"
 echo -e "========================================"
 echo -e "${GREEN}📊 Services:${NC}"
 echo -e "   - Redis:          localhost:6379"
 echo -e "   - Python Backend: http://localhost:8000"
 echo -e "   - Mock API:       http://localhost:8080"
 echo ""
-echo -e "${YELLOW}🎯 Starting TUI Dashboard...${NC}"
-echo -e "   (Press 'q' to quit)"
-echo -e "========================================"
+echo -e "${YELLOW}💡 To start the Next.js frontend:${NC}"
+echo -e "   Run: ${GREEN}./run-fullstack.sh${NC}"
+echo -e "   Or manually: ${GREEN}cd nextjs-frontend && npm run dev${NC}"
 echo ""
-
-PYTHON_API_URL=http://localhost:8000 ./go-frontend
-
-# Cleanup on exit
-echo -e "\n${YELLOW}🛑 Shutting down services...${NC}"
-pkill -9 go-frontend 2>/dev/null
-pkill -9 -f "uvicorn main:app" 2>/dev/null
-pkill -9 -f "mock-api" 2>/dev/null
-echo -e "${GREEN}✅ All services stopped${NC}"
+echo -e "${GREEN}✅ System ready!${NC}"
+echo -e "========================================"
