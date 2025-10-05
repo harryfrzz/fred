@@ -5,9 +5,10 @@ import { AIExplanation } from './AIExplanation';
 
 interface TransactionsTableProps {
   transactions: FraudResult[];
+  onRefresh?: () => void;
 }
 
-export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactions }) => {
+export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactions, onRefresh }) => {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
@@ -142,11 +143,24 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
 
   return (
     <div className="bg-gray-950 border border-gray-900 rounded-lg overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-800">
-        <h2 className="text-xl font-semibold text-white">Recent Transactions</h2>
-        <p className="text-xs text-gray-500 mt-1">
-          Showing {filteredTransactions.length} of {transactions.length} transactions
-        </p>
+      <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Recent Transactions</h2>
+          <p className="text-xs text-gray-500 mt-1">
+            Showing {filteredTransactions.length} of {transactions.length} transactions
+          </p>
+        </div>
+        {onRefresh && (
+          <button
+            onClick={onRefresh}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Refresh
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -304,7 +318,7 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
-                      {(txn.ai_explanation || txn.risk_factors || txn.recommendations) ? (
+                      {(txn.is_fraud || txn.risk_level === 'high' || txn.risk_level === 'critical') ? (
                         <div className="flex items-center justify-center">
                           {expandedRow === txn.transaction_id ? (
                             <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -321,7 +335,7 @@ export const TransactionsTable: React.FC<TransactionsTableProps> = ({ transactio
                       )}
                     </td>
                   </tr>
-                  {expandedRow === txn.transaction_id && (
+                  {expandedRow === txn.transaction_id && (txn.is_fraud || txn.risk_level === 'high' || txn.risk_level === 'critical') && (
                     <tr className="bg-black border-b border-gray-800">
                       <td colSpan={7} className="px-6 py-4">
                         <AIExplanation transaction={txn} />

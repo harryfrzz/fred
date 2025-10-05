@@ -1,29 +1,36 @@
 #!/bin/bash
 
-# Stop all fraud detection services
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "🛑 Stopping AI-Powered Fraud Detection System..."
+echo -e "${YELLOW}🛑 Stopping Fraud Detection System...${NC}"
+echo ""
 
-# Stop Python backend
-echo "Stopping Python backend..."
-pkill -f "uvicorn main:app" || true
+# Stop Docker containers
+echo -e "Stopping Docker containers (PostgreSQL, pgAdmin)..."
+docker-compose down 2>/dev/null
+echo -e "${GREEN}✅ Docker containers stopped${NC}"
 
-# Stop Mock API
-echo "Stopping Mock API..."
-pkill -f "mock-api" || true
+# Stop backend processes
+echo -e "Stopping backend processes..."
+pkill -9 -f "python main.py" 2>/dev/null || true
+pkill -9 -f "uvicorn main:app" 2>/dev/null || true
+echo -e "${GREEN}✅ Backend stopped${NC}"
 
-# Stop Frontend
-echo "Stopping Frontend..."
-pkill -f "go-frontend" || true
+# Stop frontend
+echo -e "Stopping frontend..."
+pkill -9 -f "next dev" 2>/dev/null || true
+echo -e "${GREEN}✅ Frontend stopped${NC}"
 
-# Stop Redis
-echo "Stopping Redis..."
-if ! pidof systemd > /dev/null 2>&1; then
-    # Dev container or Docker - use service command
-    sudo service redis-server stop > /dev/null 2>&1 || redis-cli shutdown 2>/dev/null || true
-else
-    # Native Linux with systemd or other platforms
-    redis-cli shutdown 2>/dev/null || true
-fi
+# Stop mock API
+echo -e "Stopping mock API..."
+pkill -9 -f "mock-api" 2>/dev/null || true
+echo -e "${GREEN}✅ Mock API stopped${NC}"
 
-echo "✅ All services stopped"
+echo ""
+echo -e "${GREEN}✅ All services stopped successfully!${NC}"
+echo -e "${YELLOW}Note: Redis is left running (system service)${NC}"
+

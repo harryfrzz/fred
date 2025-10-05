@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+from sqlalchemy.orm import Session
 import redis.asyncio as redis
 import json
 import time
@@ -13,6 +14,8 @@ from models import Transaction, FraudScore, FraudExplanation, HealthCheck, Stats
 from feature_extractor import FeatureExtractor
 from pretrained_detector import PretrainedFraudDetector  # Using pretrained LR model
 from ai_reasoner import AIReasoner
+from database import init_db, get_db
+import crud
 
 
 # Global state
@@ -105,6 +108,31 @@ async def process_transactions_from_redis():
                         except Exception as e:
                             print(f"⚠️  AI explanation error: {e}")
                     
+                    # Save to PostgreSQL database
+                    try:
+                        from database import SessionLocal
+                        db = SessionLocal()
+                        try:
+                            # Extract AI data if available
+                            ai_explanation = fraud_result_with_txn.get("ai_explanation")
+                            risk_factors = fraud_result_with_txn.get("risk_factors")
+                            recommendations = fraud_result_with_txn.get("recommendations")
+                            
+                            # Create transaction in database
+                            db_transaction = crud.create_transaction(
+                                db, 
+                                transaction, 
+                                fraud_score,
+                                ai_explanation=ai_explanation,
+                                risk_factors=risk_factors,
+                                recommendations=recommendations
+                            )
+                            db.commit()
+                        finally:
+                            db.close()
+                    except Exception as e:
+                        print(f"⚠️  Database save error: {e}")
+                    
                     # Store in memory for /recent endpoint
                     recent_fraud_results.append(fraud_result_with_txn)
                     if len(recent_fraud_results) > MAX_RECENT_RESULTS:
@@ -124,7 +152,6 @@ async def process_transactions_from_redis():
         await pubsub.unsubscribe("transactions")
         await pubsub.close()
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -132,6 +159,11 @@ async def lifespan(app: FastAPI):
     
     # Startup
     print("🚀 Starting Fraud Detection API...")
+    
+    # Initialize PostgreSQL database
+    print("🗄️  Initializing PostgreSQL database...")
+    init_db()
+    
     feature_extractor = FeatureExtractor(window_size=settings.feature_window)
     fraud_detector = PretrainedFraudDetector()  # Using pretrained LR model
     ai_reasoner = AIReasoner()
@@ -200,40 +232,91 @@ async def health_check():
 
 
 @app.get("/stats", response_model=Stats)
-async def get_stats():
-    """Get system statistics - calculated from in-memory recent_fraud_results"""
-    # Calculate stats from recent_fraud_results for accuracy across restarts
-    total_transactions = len(recent_fraud_results)
-    
-    if total_transactions > 0:
-        fraud_detected = sum(1 for r in recent_fraud_results if r.get("is_fraud", False))
-        total_risk_score = sum(r.get("fraud_probability", 0.0) for r in recent_fraud_results)
-        fraud_rate = (fraud_detected / total_transactions) * 100
-        avg_risk_score = total_risk_score / total_transactions
-    else:
-        fraud_detected = 0
-        fraud_rate = 0.0
-        avg_risk_score = 0.0
-    
-    return Stats(
-        total_transactions=total_transactions,
-        fraud_detected=fraud_detected,
-        fraud_rate=fraud_rate,
-        avg_risk_score=avg_risk_score,
-        model_type="pretrained_lr",  # Updated model type
-        uptime_seconds=time.time() - stats["start_time"]
-    )
+async def get_stats(db: Session = Depends(get_db)):
+    """Get system statistics from PostgreSQL database"""
+    try:
+        db_stats = crud.get_stats(db)
+        
+        return Stats(
+            total_transactions=db_stats["total_transactions"],
+            fraud_detected=db_stats["fraud_detected"],
+            fraud_rate=db_stats["fraud_rate"],
+            avg_risk_score=db_stats["avg_risk_score"],
+            model_type="pretrained_lr",
+            uptime_seconds=time.time() - stats["start_time"]
+        )
+    except Exception as e:
+        # Fallback to in-memory stats if database fails
+        total_transactions = len(recent_fraud_results)
+        
+        if total_transactions > 0:
+            fraud_detected = sum(1 for r in recent_fraud_results if r.get("is_fraud", False))
+            total_risk_score = sum(r.get("fraud_probability", 0.0) for r in recent_fraud_results)
+            fraud_rate = (fraud_detected / total_transactions) * 100
+            avg_risk_score = total_risk_score / total_transactions
+        else:
+            fraud_detected = 0
+            fraud_rate = 0.0
+            avg_risk_score = 0.0
+        
+        return Stats(
+            total_transactions=total_transactions,
+            fraud_detected=fraud_detected,
+            fraud_rate=fraud_rate,
+            avg_risk_score=avg_risk_score,
+            model_type="pretrained_lr",
+            uptime_seconds=time.time() - stats["start_time"]
+        )
 
 
 @app.get("/recent")
-async def get_recent_transactions(limit: int = 100):
-    """Get recent fraud detection results for frontend initialization"""
-    # Return most recent transactions (newest first)
-    return {
-        "transactions": recent_fraud_results[-limit:] if len(recent_fraud_results) > limit else recent_fraud_results,
-        "total": len(recent_fraud_results),
-        "limit": limit
-    }
+async def get_recent_transactions(limit: int = 100, db: Session = Depends(get_db)):
+    """Get recent fraud detection results from PostgreSQL database"""
+    try:
+        db_transactions = crud.get_recent_transactions(db, limit=limit)
+        
+        # Convert database objects to dict format
+        transactions = []
+        for db_txn in db_transactions:
+            txn_dict = {
+                "transaction_id": db_txn.transaction_id,
+                "user_id": db_txn.user_id,
+                "amount": float(db_txn.amount),
+                "transaction_type": db_txn.transaction_type,
+                "merchant_id": db_txn.merchant_id,
+                "timestamp": db_txn.timestamp.isoformat() if db_txn.timestamp else None,
+                "fraud_probability": float(db_txn.fraud_probability),
+                "risk_level": db_txn.risk_level,
+                "is_fraud": bool(db_txn.is_fraud),
+                "model_used": db_txn.model_used,
+                "features": db_txn.features or {},
+            }
+            
+            # Add AI explanation if available
+            if db_txn.ai_explanation:
+                txn_dict["ai_explanation"] = db_txn.ai_explanation
+            if db_txn.risk_factors:
+                txn_dict["risk_factors"] = db_txn.risk_factors
+            if db_txn.recommendations:
+                txn_dict["recommendations"] = db_txn.recommendations
+            
+            transactions.append(txn_dict)
+        
+        total = crud.get_transaction_count(db)
+        
+        return {
+            "transactions": transactions,
+            "total": total,
+            "limit": limit
+        }
+    except Exception as e:
+        print(f"⚠️  Database query error: {e}")
+        # Fallback to in-memory cache
+        return {
+            "transactions": recent_fraud_results[-limit:] if len(recent_fraud_results) > limit else recent_fraud_results,
+            "total": len(recent_fraud_results),
+            "limit": limit
+        }
 
 
 @app.post("/predict", response_model=FraudScore)

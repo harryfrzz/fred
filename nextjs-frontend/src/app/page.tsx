@@ -8,7 +8,6 @@ import { StatsOverview } from '@/components/StatsOverview';
 import { TransactionsTable } from '@/components/TransactionsTable';
 import { InteractiveCharts } from '@/components/InteractiveCharts';
 import { AIExplanation } from '@/components/AIExplanation';
-import { ToastContainer } from '@/components/FraudToast';
 import Link from 'next/link';
 
 export default function Dashboard() {
@@ -17,7 +16,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  const [toasts, setToasts] = useState<Array<{ id: string; transaction: FraudResult }>>([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   
   // Use ref to persist processed IDs across renders
@@ -38,18 +36,9 @@ export default function Dashboard() {
       
       const newTransactions = transactionsData.transactions || [];
       
-      // Check for new fraud transactions and create toasts
+      // Check for new fraud transactions and store them
       newTransactions.forEach((txn) => {
         if (txn.is_fraud && !processedIdsRef.current.has(txn.transaction_id)) {
-          // Add toast notification
-          setToasts((prev) => [
-            ...prev,
-            {
-              id: `toast-${txn.transaction_id}`,
-              transaction: txn,
-            },
-          ]);
-
           // Store in localStorage for notifications page
           const stored = localStorage.getItem('fraud_notifications') || '[]';
           const notifications: Notification[] = JSON.parse(stored);
@@ -104,10 +93,6 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const removeToast = (id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
   };
 
   const updateUnreadCount = () => {
@@ -185,21 +170,17 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-black text-gray-100">
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="space-y-8">
-          {/* Header */}
-          <div className="flex justify-between items-start border-b border-gray-800 pb-6">
-            <div>
-              <h1 className="text-3xl font-bold text-white mb-2">
-                Fraud Detection System
-              </h1>
-              <p className="text-gray-400 text-sm">
-                Real-time transaction monitoring powered by XGBoost and AI
-              </p>
+          {/* Top Bar with System Status, Notifications and Last Update */}
+          <div className="flex justify-between items-center mb-4">
+            {/* Left: System Status */}
+            <div className="flex items-center gap-2 bg-gray-950 border border-gray-900 rounded-lg px-4 py-2.5">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-gray-300 font-medium">System Up</span>
             </div>
+
+            {/* Right: Notifications and Last Update */}
             <div className="flex items-center gap-6">
               {/* Notifications Bell */}
               <Link href="/notifications">
@@ -209,29 +190,55 @@ export default function Dashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                     </svg>
                     {unreadNotifications > 0 && (
-                      <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-semibold rounded-full w-5 h-5 flex items-center justify-center">
-                        {unreadNotifications > 9 ? '9+' : unreadNotifications}
-                      </div>
+                      <>
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-semibold rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
+                          {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                        </div>
+                        {/* Bubble up animation */}
+                        <div className="absolute -top-2 -right-2 w-6 h-6 bg-red-500/30 rounded-full animate-ping"></div>
+                      </>
                     )}
                   </div>
-                  <div className="absolute right-0 mt-2 bg-gray-900 border border-gray-800 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                  <div className="absolute right-0 mt-2 bg-gray-900 border border-gray-800 text-white text-xs px-3 py-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
                     Fraud Alerts
                   </div>
                 </div>
               </Link>
 
-              {/* Status */}
-              <div className="text-right">
-                <div className="flex items-center justify-end space-x-2 mb-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="text-xs text-gray-500 uppercase tracking-wide">Live</span>
-                </div>
-                <p className="text-xs text-gray-500">Last Update</p>
-                <p className="text-sm font-mono text-gray-300">
+              {/* Last Update */}
+              <div className="bg-gray-950 border border-gray-900 rounded-lg px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Last Update</p>
+                <p className="text-sm font-mono text-white">
                   {lastUpdate.toLocaleTimeString()}
                 </p>
               </div>
             </div>
+          </div>
+
+          {/* ASCII Art Header */}
+          <div className="bg-gradient-to-br from-gray-950 to-black border border-gray-900 rounded-xl p-8 mb-4">
+            <pre className="text-blue-400 font-mono text-xs sm:text-sm md:text-base leading-tight overflow-x-auto">
+{`
+███████╗██████╗ ███████╗██████╗ 
+██╔════╝██╔══██╗██╔════╝██╔══██╗
+█████╗  ██████╔╝█████╗  ██║  ██║
+██╔══╝  ██╔══██╗██╔══╝  ██║  ██║
+██║     ██║  ██║███████╗██████╔╝
+╚═╝     ╚═╝  ╚═╝╚══════╝╚═════╝ 
+`}
+            </pre>
+            <div className="mt-4 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Fraud Detection System</h2>
+                <p className="text-gray-400 text-sm mt-1">
+                  Real-time transaction monitoring powered by Logistic Regression ML and AI
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Header */}
+          <div className="border-b border-gray-800 pb-6">
           </div>
 
           {/* Stats Overview */}
@@ -278,7 +285,7 @@ export default function Dashboard() {
           <InteractiveCharts transactions={transactions} />
 
           {/* Transactions Table */}
-          <TransactionsTable transactions={transactions} />
+          <TransactionsTable transactions={transactions} onRefresh={fetchData} />
         </div>
       </main>
     </div>
