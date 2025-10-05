@@ -1,3 +1,7 @@
+# FRED - Fraud Recognition & Enforcement Dashboard
+
+A real-time fraud detection system with machine learning, PostgreSQL persistence, and a modern web dashboard.
+
 # 🛡️ AI-Powered Fraud Detection System
 
 A real-time fraud detection system with **PostgreSQL persistence**, **Logistic Regression ML model**, and a modern **Next.js dashboard**.
@@ -20,8 +24,6 @@ Then open:
 - Python 3.12+
 - Node.js 18+
 - Redis
-
-📖 **[Read Full Setup Guide](./SETUP_GUIDE.md)** for detailed instructions.
 
 ## Features
 
@@ -126,7 +128,7 @@ Open your browser to **http://localhost:3000**
 ```python
 enable_ai_reasoning = True
 ai_reasoning_mode = "demo"  # or "ollama" for local AI
-ollama_model = "gemma2:2b"
+ollama_model = "gemma3:4b"
 fraud_threshold = 0.35
 ```
 
@@ -161,6 +163,58 @@ The system demonstrates real fraud detection patterns:
 - Known fraud patterns
 - Edge cases
 
-## License
+## Prerequisites
 
-MIT
+- Docker & Docker Compose
+- Python 3.12+
+- Node.js 18+
+- Redis
+- Git
+
+## Quick Start
+
+Run the entire system with one command:
+
+```bash
+./run-fullstack.sh
+```
+
+Then access:
+- Dashboard: http://localhost:3000
+- API: http://localhost:8000/docs
+- pgAdmin: http://localhost:5050
+
+## Generate Test Transactions
+
+```bash
+# Normal transactions
+./detect_fraud.sh
+
+# Fraud scenarios (velocity attacks, high-risk patterns)
+./critical_fraud.sh
+```
+
+## Stop the System
+
+```bash
+./stop.sh
+```
+
+## Tech Stack
+
+- Backend: FastAPI + Python
+- Frontend: Next.js 15 + React 19 + Tailwind CSS 4
+- ML Model: Logistic Regression (scikit-learn)
+- Database: PostgreSQL 15
+- Cache: Redis
+- UI: Professional dark theme with real-time updates
+
+## Features
+
+- Real-time fraud detection with ML
+- PostgreSQL persistent storage
+- Interactive dashboard with charts
+- AI-powered fraud explanations
+- Toast notifications for fraud alerts
+- Transaction history with risk levels
+- Database management via pgAdmin

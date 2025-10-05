@@ -26,12 +26,7 @@ class Settings(BaseSettings):
 
     # Ollama Configuration (for local AI)
     ollama_url: str = "http://localhost:11434"
-    ollama_model: str = "gemma2:2b"  # Using Gemma 2B for efficiency
-
-    # HuggingFace Configuration (deprecated - use Ollama instead)
-    huggingface_api_key: str = ""
-    huggingface_model: str = "gpt-oss-20b"
-    huggingface_api_url: str = "https://api-inference.huggingface.co/models"
+    ollama_model: str = "gemma3:4b"  # Using Gemma 7B for efficiency
 
     # Feature Extraction Configuration
     feature_window: int = 1000  # Number of recent transactions to keep for features

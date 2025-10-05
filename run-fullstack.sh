@@ -102,6 +102,10 @@ echo ""
 
 # Step 4: Start Backend (Python FastAPI)
 echo -e "${BLUE}🐍 Step 4/5: Starting Backend (FastAPI)...${NC}"
+
+# Create logs directory if it doesn't exist
+mkdir -p /workspaces/anthropic-hackathon-proj/logs
+
 cd /workspaces/anthropic-hackathon-proj/python-backend
 pkill -9 -f "python main.py" 2>/dev/null || true
 pkill -9 -f "uvicorn main:app" 2>/dev/null || true
