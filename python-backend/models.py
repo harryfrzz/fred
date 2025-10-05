@@ -39,6 +39,10 @@ class FraudScore(BaseModel):
     features: Dict[str, float]
     model_used: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    model_config = {
+        "protected_namespaces": ()  # Allow model_ prefix fields
+    }
 
 
 class FraudExplanation(BaseModel):
@@ -58,6 +62,10 @@ class HealthCheck(BaseModel):
     model_loaded: bool
     redis_connected: bool
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    
+    model_config = {
+        "protected_namespaces": ()  # Allow model_ prefix fields
+    }
 
 
 class Stats(BaseModel):
@@ -68,3 +76,7 @@ class Stats(BaseModel):
     avg_risk_score: float
     model_type: str
     uptime_seconds: float
+    
+    model_config = {
+        "protected_namespaces": ()  # Allow model_ prefix fields
+    }

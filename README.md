@@ -1,35 +1,27 @@
-# AI-Powered Fraud Detection System
+# 🛡️ AI-Powered Fraud Detection System
 
-A real-time fraud detection system with AI-powered anomaly detection and a modern Next.js dashboard.
+A real-time fraud detection system with **PostgreSQL persistence**, **Logistic Regression ML model**, and a modern **Next.js dashboard**.
 
-## Architecture
+## 🚀 Quick Start
 
+```bash
+# One command to start everything
+./run-fullstack.sh
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  Next.js Web Dashboard                       │
-│  (React + TypeScript + Tailwind CSS)                        │
-│  • Real-time stats & metrics                                │
-│  • Transaction history table                                │
-│  • Color-coded risk levels                                  │
-└────────────┬────────────────────────────────────────────────┘
-             │
-             │ HTTP/REST API
-             │
-┌────────────┴────────────────────────────────────────────────┐
-│                    Python ML Backend                         │
-│  - Fraud Detection (XGBoost Pretrained Model)               │
-│  - Feature Extraction (15+ engineered features)             │
-│  - AI Reasoning (Ollama/Gemma 2B - Local)                   │
-│  - Redis Pub/Sub for real-time updates                      │
-└────────────┬────────────────────────────────────────────────┘
-             │
-             │ Redis Stream
-             │
-┌────────────┴────────────────────────────────────────────────┐
-│              Go Mock Transaction Generator                   │
-│  (Generates realistic fraud patterns for testing)           │
-└─────────────────────────────────────────────────────────────┘
-```
+
+Then open:
+- **Dashboard**: http://localhost:3000
+- **API Docs**: http://localhost:8000/docs
+- **pgAdmin**: http://localhost:5050
+
+## ✅ Prerequisites
+
+- Docker & Docker Compose
+- Python 3.12+
+- Node.js 18+
+- Redis
+
+📖 **[Read Full Setup Guide](./SETUP_GUIDE.md)** for detailed instructions.
 
 ## Features
 
