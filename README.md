@@ -37,9 +37,9 @@ Then open:
 ## Tech Stack
 
 ### Backend (Python)
-- **ML Framework**: XGBoost (Pretrained Logistic Regression)
+- **ML Framework**: (Pretrained Logistic Regression)
 - **API**: FastAPI
-- **AI Reasoning**: Ollama (Gemma 2B) or Demo mode
+- **AI Reasoning**: Ollama (Gemma3 4B) or Demo mode
 - **Event Stream**: Redis Pub/Sub
 - **Feature Engineering**: 15+ behavioral features
 
