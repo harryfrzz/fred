@@ -63,7 +63,7 @@ Then open:
 - Go 1.21+
 - Redis
 
-### Option 1: Full Stack (Recommended)
+### Option 1: Full Stack (Recommended)`
 
 Start everything with one command:
 
